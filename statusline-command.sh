@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line script
-# Fields: git branch | model | balance | monthly spend | claude status
+# Fields: git branch | model | balance | monthly spend | ytd spend | claude status
 
 # ---------------------------------------------------------------
 # USER CONFIG — edit these two values to match your Anthropic plan
@@ -9,7 +9,9 @@ ACCOUNT_BALANCE=40.00     # USD: current prepaid credit balance (update manually
 # ---------------------------------------------------------------
 
 SPEND_FILE="${HOME}/.claude/monthly-spend.json"
+YTD_FILE="${HOME}/.claude/ytd-spend.json"
 THIS_MONTH=$(date +%Y-%m)
+THIS_YEAR=$(date +%Y)
 
 # ANSI colors
 C_RESET='\033[0m'
@@ -76,6 +78,24 @@ fi
 monthly_spend=$(jq '[.sessions | to_entries[] | .value] | add // 0' "$SPEND_FILE" 2>/dev/null)
 monthly_spend=${monthly_spend:-0}
 
+# --- YTD spend tracking ---
+# ytd file schema: { "year": "YYYY", "months": { "YYYY-MM": <spend_float> } }
+# Each month key stores that month's total spend; summing all gives YTD.
+if [ ! -f "$YTD_FILE" ]; then
+  echo "{\"year\":\"${THIS_YEAR}\",\"months\":{}}" > "$YTD_FILE"
+else
+  file_year=$(jq -r '.year // ""' "$YTD_FILE" 2>/dev/null)
+  if [ "$file_year" != "$THIS_YEAR" ]; then
+    echo "{\"year\":\"${THIS_YEAR}\",\"months\":{}}" > "$YTD_FILE"
+  fi
+fi
+# Always sync current month's total into the YTD file
+jq --arg month "$THIS_MONTH" --argjson spend "$monthly_spend" \
+  '.months[$month] = $spend' "$YTD_FILE" > "${YTD_FILE}.tmp" 2>/dev/null \
+  && mv "${YTD_FILE}.tmp" "$YTD_FILE"
+ytd_spend=$(jq '[.months | to_entries[] | .value] | add // 0' "$YTD_FILE" 2>/dev/null)
+ytd_spend=${ytd_spend:-0}
+
 # --- Balance (field 3) ---
 balance_val=$(awk "BEGIN { printf \"%.2f\", $ACCOUNT_BALANCE - $monthly_spend }")
 balance_fmt="\$${balance_val}"
@@ -91,11 +111,21 @@ spend_fmt=$(awk "BEGIN {
   else printf \"\$%.2f\", s
 }")
 budget_fmt="\$$(awk "BEGIN { printf \"%.0f\", $MONTHLY_BUDGET }")"
-budget_pct=$(awk "BEGIN { printf \"%.0f\", ($monthly_spend / $MONTHLY_BUDGET) * 100 }")
 # Green <= 50%, yellow 50-80%, red > 80%
 SPD_C=$(awk -v spend="$monthly_spend" -v budget="$MONTHLY_BUDGET" \
   -v g="$C_GREEN" -v y="$C_YELLOW" -v r="$C_RED" \
   'BEGIN { ratio = spend / budget; if (ratio >= 0.80) print r; else if (ratio >= 0.50) print y; else print g }')
+
+# --- YTD spend (field 5) ---
+ytd_fmt=$(awk "BEGIN {
+  s = $ytd_spend
+  if (s < 0.01) printf \"\$%.4f\", s
+  else printf \"\$%.2f\", s
+}")
+# Use same color thresholds as monthly spend but against annual budget (12x monthly)
+YTD_C=$(awk -v spend="$ytd_spend" -v budget="$MONTHLY_BUDGET" \
+  -v g="$C_GREEN" -v y="$C_YELLOW" -v r="$C_RED" \
+  'BEGIN { ratio = spend / (budget * 12); if (ratio >= 0.80) print r; else if (ratio >= 0.50) print y; else print g }')
 
 # =============================================================
 # 5. Claude status — fetched from status.claude.com, cached 5 min
@@ -150,7 +180,7 @@ else
 fi
 
 # =============================================================
-# Assemble — 5 fields separated by dim pipes
+# Assemble — 6 fields separated by dim pipes
 # =============================================================
 sep="$(printf " ${C_DIM}|${C_RESET} ")"
 parts=()
@@ -166,12 +196,15 @@ fi
 parts+=("$(printf "${C_YELLOW}%s${C_RESET}" "$model")")
 
 # 3. Balance
-parts+=("$(printf "${BAL_C}bal %s${C_RESET}" "$balance_fmt")")
+parts+=("$(printf "${BAL_C}%s left${C_RESET}" "$balance_fmt")")
 
 # 4. Monthly spend vs budget
-parts+=("$(printf "${SPD_C}%s/%s (%s%%)${C_RESET}" "$spend_fmt" "$budget_fmt" "$budget_pct")")
+parts+=("$(printf "${SPD_C}%s/%s${C_RESET}" "$spend_fmt" "$budget_fmt")")
 
-# 5. Claude status
+# 5. YTD spend
+parts+=("$(printf "${YTD_C}%s ytd${C_RESET}" "$ytd_fmt")")
+
+# 6. Claude status
 parts+=("$(printf "${STATUS_C}%s${C_RESET}" "$claude_status")")
 
 result=""

@@ -33,17 +33,19 @@ ACCOUNT_BALANCE=24.91     # your current balance
 
 - **statusline-command.sh** — the statusline script
 - **monthly-spend.json** — tracks monthly spending (auto-reset on 1st)
+- **ytd-spend.json** — year-to-date spending totals
 - **setup-statusline.sh** — one-command installer
 
 ### What it shows
 
 ```
- main | Claude Haiku 3.5 | bal $38.20 | $1.80/$40 (4%) | Systems Online
+ main | Claude Haiku 3.5 | $38.20 left | $1.80/$40 | $189.90 ytd | Systems Online
 ```
 
 Fields (left to right):
 - Git branch (cyan)
 - Claude model (yellow)
-- Account balance (green/yellow/red)
+- Balance remaining (green/yellow/red)
 - Monthly spend vs budget (green/yellow/red)
+- Year-to-date spend (green/yellow/red)
 - Anthropic service status (green/red)
