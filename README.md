@@ -4,7 +4,6 @@ General-purpose design system and best practices for UI, animation, and design p
 
 ## Files
 
-- **CLAUDE.md** — Base Claude Code best practices (general workflow, statusline, settings)
 - **DESIGN-SYSTEM.md** — Design tokens, color systems, typography, component guidelines
 
 ## Usage
